@@ -18,22 +18,14 @@ public class Dto {
         return r;
     }
 
-    public void setX(int x) {
-        this.x = x;
-    }
-
-    public void setY(float y) {
-        this.y = y;
-    }
-
-    public void setR(float r) {
-        this.r = r;
-    }
-
-    public void setAll (JSONObject jsonObject){
-        this.x = Integer.parseInt(jsonObject.get("x").toString());
-        this.y = Float.parseFloat(jsonObject.get("y").toString());
-        this.r = Float.parseFloat(jsonObject.get("r").toString());
+    public void setAll (JSONObject jsonObject) throws ValidateException {
+        try {
+            this.x = Integer.parseInt(jsonObject.get("x").toString());
+            this.y = Float.parseFloat(jsonObject.get("y").toString());
+            this.r = Float.parseFloat(jsonObject.get("r").toString());
+        } catch (NumberFormatException  e) {
+            throw new ValidateException("Неверный формат (x, y, r)");
+        }
     }
 
 }

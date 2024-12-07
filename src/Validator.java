@@ -3,9 +3,13 @@ import org.json.simple.JSONObject;
 public class Validator {
 
     public void validate(JSONObject jsonObject) throws ValidateException {
-        String x = jsonObject.get("x").toString();
-        String y = jsonObject.get("y").toString();
-        String r = jsonObject.get("r").toString();
+        Object xObj = jsonObject.get("x");
+        Object yObj = jsonObject.get("y");
+        Object rObj = jsonObject.get("r");
+
+        String x = xObj != null ? xObj.toString() : null;
+        String y = yObj != null ? yObj.toString() : null;
+        String r = rObj != null ? rObj.toString() : null;
 
         if (x == null || x.isEmpty()) {
             throw new ValidateException("X не имеет значения");
@@ -20,7 +24,7 @@ public class Validator {
         }
 
         if (y == null || y.isEmpty()) {
-            throw new ValidateException("X не имеет значения");
+            throw new ValidateException("Y не имеет значения");
         }
         try {
             float yy = Float.parseFloat(y);
@@ -43,4 +47,5 @@ public class Validator {
             throw new ValidateException("R не является номером");
         }
     }
+
 }

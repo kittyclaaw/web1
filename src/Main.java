@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.net.URLDecoder;
 
 public class Main {
 
@@ -20,18 +21,24 @@ public class Main {
     }
 
     private JSONObject getParametersFromQuery() throws ValidateException {
-        String queryString = System.getProperties().getProperty("QUERY_STRING");
+        String queryString = System.getProperty("QUERY_STRING");
         if (queryString == null || queryString.isEmpty()) {
             throw new ValidateException("Параметры запроса отсутствуют");
         }
 
         JSONObject jsonObject = new JSONObject();
-        String[] pairs = queryString.split("&");
-        for (String pair : pairs) {
-            String[] keyValue = pair.split("=");
-            if (keyValue.length == 2) {
-                jsonObject.put(keyValue[0], keyValue[1]);
+        try {
+            String[] pairs = queryString.split("&");
+            for (String pair : pairs) {
+                String[] keyValue = pair.split("=");
+                if (keyValue.length == 2) {
+                    String key = URLDecoder.decode(keyValue[0], StandardCharsets.UTF_8);
+                    String value = URLDecoder.decode(keyValue[1], StandardCharsets.UTF_8);
+                    jsonObject.put(key, value);
+                }
             }
+        } catch (Exception e) {
+            throw new ValidateException("Некорректный формат параметров запроса");
         }
         return jsonObject;
     }
@@ -39,7 +46,8 @@ public class Main {
     private String responseError(String httpTemplate, String error) {
         var formattedNow = LocalDateTime.now().format(formatter);
         var json = String.format(httpResponses.ERROR_JSON, formattedNow, error);
-        return String.format(httpTemplate, json.getBytes(StandardCharsets.UTF_8).length, json);
+        int contentLength = json.getBytes(StandardCharsets.UTF_8).length;
+        return String.format(httpTemplate, contentLength, json);
     }
 
     public void run() {
@@ -47,19 +55,29 @@ public class Main {
 
         while (fcgi.FCGIaccept() >= 0) {
             try {
-                String requestMethod = System.getProperties().getProperty("REQUEST_METHOD");
+                String requestMethod = System.getProperty("REQUEST_METHOD");
                 if (!"GET".equals(requestMethod)) {
-                    throw new ValidateException("Поддерживаются только GET запросы");
-                }
-
-                String URI = System.getProperties().getProperty("REQUEST_URI");
-                if (!URI.contains("/fcgi-bin/web1.jar")) {
-                    String response = responseError(httpResponses.HTTP_NOT_FOUND, "Неверный URI");
-                    System.out.println(response);
+                    String response = responseError(httpResponses.HTTP_FORBIDDEN, "Поддерживаются только GET запросы");
+                    System.out.print(response);
                     continue;
                 }
 
-                JSONObject jsonObject = getParametersFromQuery(); // Чтение из строки запроса
+                String URI = System.getProperty("REQUEST_URI");
+                if (URI == null || !URI.contains("/fcgi-bin/web1.jar")) {
+                    String response = responseError(httpResponses.HTTP_NOT_FOUND, "Неверный URI");
+                    System.out.print(response);
+                    continue;
+                }
+
+                int pathEndIndex = URI.indexOf("/fcgi-bin/web1.jar");
+                String pathAfterWeb1Jar = URI.substring(pathEndIndex + "/fcgi-bin/web1.jar".length());
+                if (pathAfterWeb1Jar.contains("/")) {
+                    String response = responseError(httpResponses.HTTP_FORBIDDEN, "Запрос с дополнительными путями запрещен");
+                    System.out.print(response);
+                    continue;
+                }
+
+                JSONObject jsonObject = getParametersFromQuery();
                 Validator validator = new Validator();
                 validator.validate(jsonObject);
 
@@ -67,22 +85,33 @@ public class Main {
                 dto.setAll(jsonObject);
 
                 var startTime = Instant.now();
-                boolean result = dotChecker.isInsideArea(dto.getX(), dto.getY(), dto.getR());
+                boolean result;
+                try {
+                    result = dotChecker.isInsideArea(dto.getX(), dto.getY(), dto.getR());
+                } catch (Exception e) {
+                    throw new ValidateException("Ошибка проверки точки");
+                }
                 var endTime = Instant.now();
 
                 long timeTakenNanos = ChronoUnit.NANOS.between(startTime, endTime);
                 String formattedNow = LocalDateTime.now().format(formatter);
 
                 var json = String.format(httpResponses.RESULT_JSON, timeTakenNanos, formattedNow, result);
-                var response = String.format(httpResponses.HTTP_RESPONSE, json.getBytes(StandardCharsets.UTF_8).length, json);
-                System.out.println(response);
+                int contentLength = json.getBytes(StandardCharsets.UTF_8).length;
+
+                var response = String.format(httpResponses.HTTP_RESPONSE, contentLength, json);
+                System.out.print(response);
 
             } catch (ValidateException e) {
                 String response = responseError(httpResponses.HTTP_BAD_REQUEST, e.getMessage());
-                System.out.println(response);
+                System.out.print(response);
+            } catch (Exception e) {
+                String response = responseError(httpResponses.HTTP_BAD_REQUEST, "Непредвиденная ошибка: " + e.getMessage());
+                System.out.print(response);
             }
         }
     }
+
 
     public static void main(String[] args) {
         new Main().run();
